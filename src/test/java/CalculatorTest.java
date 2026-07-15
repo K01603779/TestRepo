@@ -11,11 +11,11 @@ public class CalculatorTest {
 
   @Test
   void subtractNumbers() {
-    assertEquals(10, Calculator.sub(10, 5));
+    assertEquals(5, Calculator.sub(10, 5));
   }
 
   @Test
   void multiplyNumbers() {
-    assertEquals(10, Calculator.mul(10, 5));
+    assertEquals(50, Calculator.mul(10, 5));
   }
 }
