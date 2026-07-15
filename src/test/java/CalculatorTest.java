@@ -23,4 +23,9 @@ public class CalculatorTest {
   void divideNumbers() {
     assertEquals(2, Calculator.div(10, 5));
   }
+
+  @Test
+  void modulusNumbers() {
+    assertEquals(1, Calculator.mod(10, 5));
+  }
 }
