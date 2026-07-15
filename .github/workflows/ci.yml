@@ -8,8 +8,8 @@ on:
 
 permissions:
   contents: read
-  security-events: write
-  pull-requests: write
+  security-events: write   # required only for github/codeql-action/upload-sarif
+  pull-requests: write     # required only to post/update the PR comment
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -44,9 +44,17 @@ jobs:
         run: |
           echo "::error::Spotless found formatting issues. Run 'mvn spotless:apply' locally."
 
+          # Grab every line between the "violations:" header and the next blank
+          # line, not just the first 20 - a fixed line count silently drops files
+          # once a PR touches more than 20 misformatted files.
           awk '/The following files had format violations:/{flag=1; next} /^$/{flag=0} flag' spotless.log \
             | sed 's/^[[:space:]]*//' \
             | while IFS= read -r file; do
+                # line=1 is required for GitHub to anchor this in the PR's
+                # "Files changed" diff view - file= alone only shows up in
+                # the run log / annotations summary, not inline on the PR.
+                # Spotless doesn't report violation line numbers, so line 1
+                # is the best anchor point available.
                 [ -n "$file" ] && echo "::error file=$file,line=1,col=1::Spotless formatting violation. Run 'mvn spotless:apply'."
               done
 
@@ -147,6 +155,11 @@ jobs:
       - name: Run tests
         id: test
         continue-on-error: true
+        # -T 1C removed here: parallel test execution across modules can
+        # introduce flaky, order-dependent failures that are hard to reproduce.
+        # -fae (fail-at-end) keeps the reactor running through all modules so
+        # every module's surefire-reports get written, not just the first
+        # module that failed.
         run: xvfb-run mvn -B -fae test
 
       - name: Parse test results
@@ -178,6 +191,9 @@ jobs:
                   name = tc.get('name', '')
                   message = (bad.get('message') or '').strip().replace('\n', ' ')
 
+                  # Best-effort source lookup: strip inner-class suffix
+                  # (Foo$Nested -> Foo) and any parameterized-test index
+                  # (test[1] -> test) before searching for the file/line.
                   outer_class = classname.split('$')[0]
                   base_name = name.split('[')[0]
                   rel = outer_class.replace('.', '/') + '.java'
@@ -291,14 +307,54 @@ jobs:
         if: steps.test.outcome == 'failure'
         run: exit 1
 
+      - name: Check coverage threshold
+        id: coverage
+        continue-on-error: true
+        # Reuses the jacoco.exec data recorded during `mvn test` above (via
+        # the prepare-agent execution bound in pom.xml) - no need to re-run
+        # tests to get coverage numbers.
+        run: |
+          mvn -B jacoco:report jacoco:check 2>&1 | tee jacoco.log
+          exit "${PIPESTATUS[0]}"
+
+      - name: Publish coverage annotations
+        if: steps.coverage.outcome == 'failure'
+        run: |
+          violations=$(grep "Rule violated" jacoco.log || true)
+          if [ -n "$violations" ]; then
+            echo "$violations" | while IFS= read -r line; do
+              echo "::error::${line#*ERROR] }"
+            done
+          else
+            echo "::error::JaCoCo coverage check failed - see the coverage-report artifact for details."
+          fi
+
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          if-no-files-found: ignore
+          path: |
+            target/site/jacoco/
+            jacoco.log
+
+      - name: Fail if coverage check failed
+        if: steps.coverage.outcome == 'failure'
+        run: exit 1
+
       - name: Run SpotBugs
         id: spotbugs
         continue-on-error: true
+        # sarifOutput asks the plugin to also emit target/spotbugsSarif.json
+        # alongside its normal XML report - no separate goal/run needed.
         run: mvn -B spotbugs:check -Dspotbugs.sarifOutput=true
 
       - name: Rename SARIF for upload-sarif
         if: steps.spotbugs.outcome == 'failure'
         run: |
+          # upload-sarif expects a *.sarif(.json) filename; the plugin's
+          # default output name doesn't match, so give it one it recognizes.
           if [ -f target/spotbugsSarif.json ]; then
             cp target/spotbugsSarif.json target/spotbugs.sarif
           fi

@@ -1,0 +1,34 @@
+name: PR Title Lint
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+    branches: ["main"]
+
+permissions:
+  contents: read
+
+jobs:
+  lint-pr-title:
+    name: Lint PR Title
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Check Conventional Commits format
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          # type(optional-scope)!: description
+          # the trailing "!" marks a breaking change, also allowed
+          pattern='^(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)(\([a-z0-9_-]+\))?!?: .+'
+
+          if ! echo "$PR_TITLE" | grep -qE "$pattern"; then
+            echo "::error::PR title does not follow Conventional Commits format: \"$PR_TITLE\""
+            echo "Expected: <type>(optional-scope): <description>"
+            echo "Example:  fix(auth): correct token refresh bug"
+            echo "Allowed types: feat, fix, docs, style, refactor, perf, test, build, ci, chore, revert"
+            exit 1
+          fi
+
+          echo "PR title follows Conventional Commits format."
