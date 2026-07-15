@@ -10,10 +10,12 @@ public class CalculatorTest {
   }
 
   @Test
-  void subtractNumbers(){
-    assertEquals(10,Calculator.sub(10,5));}
+  void subtractNumbers() {
+    assertEquals(10, Calculator.sub(10, 5));
+  }
 
   @Test
-  void multiplyNumbers(){
-    assertEquals(10,Calculator.mul(10,5));}
+  void multiplyNumbers() {
+    assertEquals(10, Calculator.mul(10, 5));
+  }
 }
