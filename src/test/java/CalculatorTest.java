@@ -8,4 +8,14 @@ public class CalculatorTest {
   void addNumbers() {
     assertEquals(10, Calculator.add(5, 5));
   }
+
+  @Test
+  void subtractNumbers() {
+    assertEquals(5, Calculator.sub(10, 5));
+  }
+
+  @Test
+  void multiplyNumbers() {
+    assertEquals(50, Calculator.mul(10, 5));
+  }
 }

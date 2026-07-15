@@ -6,6 +6,11 @@ on:
   push:
     branches: ["main"]
 
+permissions:
+  contents: read
+  security-events: write
+  pull-requests: write
+
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
@@ -27,23 +32,294 @@ jobs:
           java-version: "21"
           cache: maven
 
+      - name: Check formatting
+        id: spotless
+        continue-on-error: true
+        run: |
+          mvn -B spotless:check 2>&1 | tee spotless.log
+          exit "${PIPESTATUS[0]}"
+
+      - name: Publish Spotless annotations
+        if: steps.spotless.outcome == 'failure'
+        run: |
+          echo "::error::Spotless found formatting issues. Run 'mvn spotless:apply' locally."
+
+          awk '/The following files had format violations:/{flag=1; next} /^$/{flag=0} flag' spotless.log \
+            | sed 's/^[[:space:]]*//' \
+            | while IFS= read -r file; do
+                [ -n "$file" ] && echo "::error file=$file,line=1,col=1::Spotless formatting violation. Run 'mvn spotless:apply'."
+              done
+
+      - name: Upload Spotless report
+        if: steps.spotless.outcome == 'failure'
+        uses: actions/upload-artifact@v4
+        with:
+          name: spotless-report
+          path: spotless.log
+
+      - name: Comment on PR
+        if: steps.spotless.outcome == 'failure' && github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const log = fs.readFileSync('spotless.log', 'utf8');
+
+            // Same parsing as the annotation step above: everything between
+            // the "violations:" header and the next blank line.
+            const lines = log.split('\n');
+            let inBlock = false;
+            const files = [];
+            for (const line of lines) {
+              if (line.includes('The following files had format violations:')) {
+                inBlock = true;
+                continue;
+              }
+              if (inBlock) {
+                if (line.trim() === '') { inBlock = false; continue; }
+                files.push(line.trim());
+              }
+            }
+
+            // Hidden marker so re-runs update this comment instead of piling
+            // up a new one on every failing push.
+            const marker = '<!-- spotless-check -->';
+            const body = [
+              marker,
+              '### ❌ Spotless found formatting issues',
+              '',
+              'Run `mvn spotless:apply` locally, commit, and push to resolve.',
+              '',
+              files.length ? files.map(f => `- \`${f}\``).join('\n') : '_(see the spotless-report artifact for details)_',
+            ].join('\n');
+
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+            const existing = comments.find(c => c.body.includes(marker));
+
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body,
+              });
+            }
+
+      - name: Clear PR comment on success
+        if: steps.spotless.outcome == 'success' && github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const marker = '<!-- spotless-check -->';
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+            const existing = comments.find(c => c.body.includes(marker));
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body: `${marker}\n### ✅ Spotless formatting issues resolved`,
+              });
+            }
+
+      - name: Fail if Spotless failed
+        if: steps.spotless.outcome == 'failure'
+        run: exit 1
+
       - name: Compile
         run: mvn -B -T 1C test-compile
 
       - name: Run tests
-        run: xvfb-run mvn -B -T 1C test
+        id: test
+        continue-on-error: true
+        run: xvfb-run mvn -B -fae test
 
-      - name: Check formatting
-        run: mvn -B spotless:check
+      - name: Parse test results
+        id: test-results
+        if: steps.test.outcome == 'failure'
+        run: |
+          python3 - <<'PY'
+          import glob, json, re, xml.etree.ElementTree as ET
+
+          failures = []
+
+          for xml_path in glob.glob('**/target/surefire-reports/*.xml', recursive=True):
+              try:
+                  root = ET.parse(xml_path).getroot()
+              except ET.ParseError:
+                  continue
+              if root.tag != 'testsuite':
+                  continue
+              for tc in root.findall('testcase'):
+                  bad = tc.find('failure')
+                  kind = 'failure'
+                  if bad is None:
+                      bad = tc.find('error')
+                      kind = 'error'
+                  if bad is None:
+                      continue
+
+                  classname = tc.get('classname', '')
+                  name = tc.get('name', '')
+                  message = (bad.get('message') or '').strip().replace('\n', ' ')
+
+                  outer_class = classname.split('$')[0]
+                  base_name = name.split('[')[0]
+                  rel = outer_class.replace('.', '/') + '.java'
+                  matches = glob.glob(f'**/src/test/java/{rel}', recursive=True)
+                  file_path = matches[0] if matches else None
+                  line = None
+                  if file_path:
+                      pattern = re.compile(r'\b' + re.escape(base_name) + r'\s*\(')
+                      with open(file_path, encoding='utf-8', errors='ignore') as f:
+                          for i, text_line in enumerate(f, start=1):
+                              if pattern.search(text_line):
+                                  line = i
+                                  break
+
+                  failures.append({
+                      'classname': classname, 'name': name, 'kind': kind,
+                      'message': message, 'file': file_path, 'line': line,
+                  })
+
+          for f in failures:
+              msg = f"{f['classname']}.{f['name']} {f['kind']}: {f['message']}"[:500]
+              if f['file'] and f['line']:
+                  print(f"::error file={f['file']},line={f['line']}::{msg}")
+              elif f['file']:
+                  print(f"::error file={f['file']},line=1::{msg}")
+              else:
+                  print(f"::error::{msg}")
+
+          with open('test-failures.json', 'w') as out:
+              json.dump(failures, out)
+          PY
+
+      - name: Upload test report
+        if: steps.test.outcome == 'failure'
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-report
+          if-no-files-found: ignore
+          path: |
+            **/target/surefire-reports/*.xml
+
+      - name: Comment on PR for test failures
+        if: steps.test.outcome == 'failure' && github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            let failures = [];
+            try {
+              failures = JSON.parse(fs.readFileSync('test-failures.json', 'utf8'));
+            } catch (e) {
+              // parsing step didn't produce a file - fall back to an empty list
+            }
+
+            const marker = '<!-- test-results-check -->';
+            const rows = failures.map(f => `- \`${f.classname}#${f.name}\` — ${f.message || '_no message_'}`);
+            const body = [
+              marker,
+              '### ❌ Test failures',
+              '',
+              `${failures.length || 'Some'} test${failures.length === 1 ? '' : 's'} failed.`,
+              '',
+              rows.length ? rows.join('\n') : '_(see the test-report artifact for details)_',
+            ].join('\n');
+
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+            const existing = comments.find(c => c.body.includes(marker));
+
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body,
+              });
+            }
+
+      - name: Clear test-failure PR comment on success
+        if: steps.test.outcome == 'success' && github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const marker = '<!-- test-results-check -->';
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+            const existing = comments.find(c => c.body.includes(marker));
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body: `${marker}\n### ✅ All tests passing`,
+              });
+            }
+
+      - name: Fail if tests failed
+        if: steps.test.outcome == 'failure'
+        run: exit 1
 
       - name: Run SpotBugs
-        run: mvn -B spotbugs:check
+        id: spotbugs
+        continue-on-error: true
+        run: mvn -B spotbugs:check -Dspotbugs.sarifOutput=true
+
+      - name: Rename SARIF for upload-sarif
+        if: steps.spotbugs.outcome == 'failure'
+        run: |
+          if [ -f target/spotbugsSarif.json ]; then
+            cp target/spotbugsSarif.json target/spotbugs.sarif
+          fi
+
+      - name: Publish SpotBugs annotations
+        if: steps.spotbugs.outcome == 'failure'
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: target/spotbugs.sarif
+          category: spotbugs
 
       - name: Upload quality reports
-        if: failure()
+        if: steps.spotbugs.outcome == 'failure'
         uses: actions/upload-artifact@v4
         with:
           name: quality-reports
+          if-no-files-found: ignore
           path: |
-            target/checkstyle-result.xml
             target/spotbugsXml.xml
+            target/spotbugsSarif.json
+
+      - name: Fail if SpotBugs failed
+        if: steps.spotbugs.outcome == 'failure'
+        run: exit 1
