@@ -307,113 +307,130 @@ jobs:
         if: steps.test.outcome == 'failure'
         run: exit 1
 
-      - name: Check coverage threshold
-        id: coverage
-        continue-on-error: true
-        # Reuses the jacoco.exec data recorded during `mvn test` above (via
-        # the prepare-agent execution bound in pom.xml) - no need to re-run
-        # tests to get coverage numbers.
-        run: |
-          mvn -B jacoco:report jacoco:check 2>&1 | tee jacoco.log
-          exit "${PIPESTATUS[0]}"
+          - name: Run tests with coverage
+            id: test
+            continue-on-error: true
+            run: |
+              xvfb-run mvn -B -fae verify 2>&1 | tee test.log
+              exit "${PIPESTATUS[0]}"
 
-      - name: Publish coverage annotations
-        if: steps.coverage.outcome == 'failure'
-        run: |
-          violations=$(grep "Rule violated" jacoco.log || true)
-          if [ -n "$violations" ]; then
-            echo "$violations" | while IFS= read -r line; do
-              echo "::error::${line#*ERROR] }"
-            done
-          else
-            echo "::error::JaCoCo coverage check failed - see the coverage-report artifact for details."
-          fi
+          - name: Generate JaCoCo report
+            run: mvn -B jacoco:report
 
-      - name: Upload coverage report
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: coverage-report
-          if-no-files-found: ignore
-          path: |
-            target/site/jacoco/
-            jacoco.log
+          - name: Check changed files coverage
+            id: coverage
+            continue-on-error: true
+            run: |
+              python3 .github/scripts/check_changed_coverage.py
 
-      - name: Comment on PR for coverage
-        if: steps.coverage.outcome == 'failure' && github.event_name == 'pull_request'
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const fs = require('fs');
-            let log = '';
-            try {
-              log = fs.readFileSync('jacoco.log', 'utf8');
-            } catch (e) {
-              // log step didn't produce a file - fall back to an empty string
-            }
+          - name: Publish coverage annotations
+            if: steps.coverage.outcome == 'failure'
+            run: |
+              while IFS= read -r line; do
+                file="${line%% (*}"
+                message="${line#* }"
+                echo "::error file=${file},line=1::Coverage below required threshold ${message}"
+              done < coverage-failures.txt
 
-            // Same "Rule violated" lines the annotation step greps for,
-            // e.g. "lines covered ratio is 0.65, but expected minimum is 0.70"
-            const violations = log
-              .split('\n')
-              .filter(line => line.includes('Rule violated'))
-              .map(line => line.replace(/^.*ERROR\]\s*/, '').trim());
+          - name: Upload coverage report
+            if: always()
+            uses: actions/upload-artifact@v4
+            with:
+              name: coverage-report
+              if-no-files-found: ignore
+              path: |
+                target/site/jacoco/
+                coverage-failures.txt
 
-            const marker = '<!-- coverage-check -->';
-            const body = [
-              marker,
-              '### ❌ Coverage threshold not met',
-              '',
-              violations.length ? violations.map(v => `- ${v}`).join('\n') : '_(see the coverage-report artifact for details)_',
-            ].join('\n');
+          - name: Comment coverage failure on PR
+            if: steps.coverage.outcome == 'failure' && github.event_name == 'pull_request'
+            uses: actions/github-script@v7
+            with:
+              script: |
+                const fs = require('fs');
+                
+                let failures = [];
+                if (fs.existsSync('coverage-failures.txt')) {
+                  failures = fs.readFileSync(
+                    'coverage-failures.txt',
+                    'utf8'
+                  )
+                  .split('\n')
+                  .filter(Boolean);
+                }
+                
+                const marker = '<!-- coverage-check -->';
+                
+                const body = [
+                  marker,
+                  '### ❌ Coverage threshold not met',
+                  '',
+                  'The following changed files are below the required coverage:',
+                  '',
+                  ...failures.map(f => `- \`${f}\``),
+                  '',
+                  'See the coverage-report artifact for the full JaCoCo report.'
+                ].join('\n');
+                
+                
+                const { data: comments } =
+                  await github.rest.issues.listComments({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    issue_number: context.issue.number,
+                  });
+                
+                
+                const existing =
+                  comments.find(c => c.body.includes(marker));
+                
+                
+                if (existing) {
+                  await github.rest.issues.updateComment({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    comment_id: existing.id,
+                    body
+                  });
+                } else {
+                  await github.rest.issues.createComment({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    issue_number: context.issue.number,
+                    body
+                  });
+                }
 
-            const { data: comments } = await github.rest.issues.listComments({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: context.issue.number,
-            });
-            const existing = comments.find(c => c.body.includes(marker));
+          - name: Clear coverage comment on success
+            if: steps.coverage.outcome == 'success' && github.event_name == 'pull_request'
+            uses: actions/github-script@v7
+            with:
+              script: |
+                const marker = '<!-- coverage-check -->';
+                
+                const { data: comments } =
+                  await github.rest.issues.listComments({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    issue_number: context.issue.number,
+                  });
+                
+                const existing =
+                  comments.find(c => c.body.includes(marker));
+                
+                if (existing) {
+                  await github.rest.issues.updateComment({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    comment_id: existing.id,
+                    body:
+                      `${marker}\n### ✅ Coverage threshold met`
+                  });
+                }
 
-            if (existing) {
-              await github.rest.issues.updateComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                comment_id: existing.id,
-                body,
-              });
-            } else {
-              await github.rest.issues.createComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: context.issue.number,
-                body,
-              });
-            }
-
-      - name: Clear coverage PR comment on success
-        if: steps.coverage.outcome == 'success' && github.event_name == 'pull_request'
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const marker = '<!-- coverage-check -->';
-            const { data: comments } = await github.rest.issues.listComments({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: context.issue.number,
-            });
-            const existing = comments.find(c => c.body.includes(marker));
-            if (existing) {
-              await github.rest.issues.updateComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                comment_id: existing.id,
-                body: `${marker}\n### ✅ Coverage threshold met`,
-              });
-            }
-
-      - name: Fail if coverage check failed
-        if: steps.coverage.outcome == 'failure'
-        run: exit 1
+          - name: Fail if coverage check failed
+            if: steps.coverage.outcome == 'failure'
+            run: exit 1
 
       - name: Run SpotBugs
         id: spotbugs
