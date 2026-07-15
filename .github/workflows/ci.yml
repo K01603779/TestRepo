@@ -52,7 +52,7 @@ jobs:
 
       - name: Upload Spotless report
         if: steps.spotless.outcome == 'failure'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: spotless-report
           path: spotless.log
@@ -212,7 +212,7 @@ jobs:
 
       - name: Upload test report
         if: steps.test.outcome == 'failure'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: test-report
           if-no-files-found: ignore
@@ -312,7 +312,7 @@ jobs:
 
       - name: Upload quality reports
         if: steps.spotbugs.outcome == 'failure'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: quality-reports
           if-no-files-found: ignore
