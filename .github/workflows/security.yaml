@@ -2,11 +2,14 @@ name: Security Scan
 
 on:
   push:
-    branches: [ "main" ]
-  pull_request:
-    branches: [ "main" ]
+    branches: ["main"]
+
   schedule:
-    - cron: '0 3 * * 1'
+    - cron: "0 3 * * 1"
+
+concurrency:
+  group: security-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   actions: read
@@ -17,15 +20,17 @@ jobs:
   security:
     name: Security Scan
     runs-on: ubuntu-latest
+    timeout-minutes: 15
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
       - name: Set up JDK 21
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: '21'
+          java-version: "21"
           cache: maven
 
       - name: Initialize CodeQL
@@ -34,7 +39,7 @@ jobs:
           languages: java
 
       - name: Build
-        run: mvn -B package -DskipTests
+        run: mvn -B -T 1C compile -DskipTests
 
       - name: Analyze CodeQL
         uses: github/codeql-action/analyze@v3
