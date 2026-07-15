@@ -21,5 +21,6 @@ public class CalculatorTest {
 
   @Test
   void divideNumbers() {
-    assertEquals(10, Calculator.div(10, 5));}
+    assertEquals(10, Calculator.div(10, 5));
+  }
 }
