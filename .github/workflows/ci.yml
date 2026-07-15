@@ -6,6 +6,10 @@ on:
   push:
     branches: ["main"]
 
+permissions:
+  contents: read
+  security-events: write   # required only for github/codeql-action/upload-sarif
+
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
@@ -27,23 +31,84 @@ jobs:
           java-version: "21"
           cache: maven
 
+      - name: Check formatting
+        id: spotless
+        continue-on-error: true
+        run: |
+          mvn -B spotless:check 2>&1 | tee spotless.log
+          exit "${PIPESTATUS[0]}"
+
+      - name: Publish Spotless annotations
+        if: steps.spotless.outcome == 'failure'
+        run: |
+          echo "::error::Spotless found formatting issues. Run 'mvn spotless:apply' locally."
+
+          # Grab every line between the "violations:" header and the next blank
+          # line, not just the first 20 - a fixed line count silently drops files
+          # once a PR touches more than 20 misformatted files.
+          awk '/The following files had format violations:/{flag=1; next} /^$/{flag=0} flag' spotless.log \
+            | sed 's/^[[:space:]]*//' \
+            | while IFS= read -r file; do
+                # line=1 is required for GitHub to anchor this in the PR's
+                # "Files changed" diff view - file= alone only shows up in
+                # the run log / annotations summary, not inline on the PR.
+                # Spotless doesn't report violation line numbers, so line 1
+                # is the best anchor point available.
+                [ -n "$file" ] && echo "::error file=$file,line=1,col=1::Spotless formatting violation. Run 'mvn spotless:apply'."
+              done
+
+      - name: Upload Spotless report
+        if: steps.spotless.outcome == 'failure'
+        uses: actions/upload-artifact@v4
+        with:
+          name: spotless-report
+          path: spotless.log
+
+      - name: Fail if Spotless failed
+        if: steps.spotless.outcome == 'failure'
+        run: exit 1
+
       - name: Compile
         run: mvn -B -T 1C test-compile
 
       - name: Run tests
-        run: xvfb-run mvn -B -T 1C test
-
-      - name: Check formatting
-        run: mvn -B spotless:check
+        # -T 1C removed here: parallel test execution across modules can
+        # introduce flaky, order-dependent failures that are hard to reproduce.
+        run: xvfb-run mvn -B test
 
       - name: Run SpotBugs
-        run: mvn -B spotbugs:check
+        id: spotbugs
+        continue-on-error: true
+        # sarifOutput asks the plugin to also emit target/spotbugsSarif.json
+        # alongside its normal XML report - no separate goal/run needed.
+        run: mvn -B spotbugs:check -Dspotbugs.sarifOutput=true
+
+      - name: Rename SARIF for upload-sarif
+        if: steps.spotbugs.outcome == 'failure'
+        run: |
+          # upload-sarif expects a *.sarif(.json) filename; the plugin's
+          # default output name doesn't match, so give it one it recognizes.
+          if [ -f target/spotbugsSarif.json ]; then
+            cp target/spotbugsSarif.json target/spotbugs.sarif
+          fi
+
+      - name: Publish SpotBugs annotations
+        if: steps.spotbugs.outcome == 'failure'
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: target/spotbugs.sarif
+          category: spotbugs
 
       - name: Upload quality reports
-        if: failure()
+        if: steps.spotbugs.outcome == 'failure'
         uses: actions/upload-artifact@v4
         with:
           name: quality-reports
+          if-no-files-found: ignore
           path: |
-            target/checkstyle-result.xml
             target/spotbugsXml.xml
+            target/spotbugsSarif.json
+
+      - name: Fail if SpotBugs failed
+        if: steps.spotbugs.outcome == 'failure'
+        run: exit 1
