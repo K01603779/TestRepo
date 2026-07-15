@@ -7,6 +7,7 @@ on:
 
 permissions:
   contents: read
+  pull-requests: write   # required only to post/update the PR comment
 
 jobs:
   lint-pr-title:
@@ -16,6 +17,8 @@ jobs:
 
     steps:
       - name: Check Conventional Commits format
+        id: title-check
+        continue-on-error: true
         env:
           PR_TITLE: ${{ github.event.pull_request.title }}
         run: |
@@ -32,3 +35,72 @@ jobs:
           fi
 
           echo "PR title follows Conventional Commits format."
+
+      - name: Comment on PR
+        if: steps.title-check.outcome == 'failure'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const marker = '<!-- pr-title-lint -->';
+            const title = context.payload.pull_request.title;
+            const body = [
+              marker,
+              '### ❌ PR title does not follow Conventional Commits format',
+              '',
+              `Current title: \`${title}\``,
+              '',
+              'Expected: `<type>(optional-scope): <description>`',
+              'Example:  `fix(auth): correct token refresh bug`',
+              '',
+              'Allowed types: `feat`, `fix`, `docs`, `style`, `refactor`, `perf`, `test`, `build`, `ci`, `chore`, `revert`',
+              '',
+              '_This comment updates automatically once the title is fixed - just edit the PR title, no need to push a commit._',
+            ].join('\n');
+
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+            const existing = comments.find(c => c.body.includes(marker));
+
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body,
+              });
+            }
+
+      - name: Clear PR comment on success
+        if: steps.title-check.outcome == 'success'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const marker = '<!-- pr-title-lint -->';
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+            const existing = comments.find(c => c.body.includes(marker));
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body: `${marker}\n### ✅ PR title follows Conventional Commits format`,
+              });
+            }
+
+      - name: Fail if title check failed
+        if: steps.title-check.outcome == 'failure'
+        run: exit 1
