@@ -18,4 +18,8 @@ public class CalculatorTest {
   void multiplyNumbers() {
     assertEquals(50, Calculator.mul(10, 5));
   }
+
+  @Test
+  void divideNumbers() {
+    assertEquals(50, Calculator.div(10, 5));}
 }
