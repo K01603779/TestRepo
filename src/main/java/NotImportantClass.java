@@ -1,6 +1,6 @@
 public class NotImportantClass implements IDoSomething {
-    @Override
-    public String doSomething() {
-        return "Doing something...";
-    }
+  @Override
+  public String doSomething() {
+    return "Doing something...";
+  }
 }

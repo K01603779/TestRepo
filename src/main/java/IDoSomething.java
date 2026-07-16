@@ -1,3 +1,3 @@
 public interface IDoSomething {
-    String doSomething();
+  String doSomething();
 }
