@@ -33,6 +33,7 @@ public class NotImportantClassTest {
         .forEach(x -> x.intValue());
   }
 
+  // should be spotted by spotbugs?
   public boolean equals(Object obj) {
     return true;
   }
