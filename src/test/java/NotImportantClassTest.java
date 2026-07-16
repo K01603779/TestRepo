@@ -23,6 +23,7 @@ public class NotImportantClassTest {
     // Assertions.assertEquals("", doSomething.doSomething());
     // Assertions.assertEquals("", doSomething.doSomething());
     // Assertions.assertEquals("", doSomething.doSomething());
+    // Assertions.assertEquals("", doSomething.doSomething());
   }
 
   @Test
