@@ -31,5 +31,7 @@ public class NotImportantClassTest {
         .filter(x -> x < 100)
         .collect(Collectors.toSet())
         .forEach(x -> x.intValue());
+
+    var x =
   }
 }
