@@ -1,0 +1,133 @@
+name: Spotless
+
+description: Run Spotless, annotate formatting issues, upload reports, and comment on PRs.
+
+inputs:
+  github-token:
+    description: GitHub token
+    required: true
+
+runs:
+  using: composite
+
+  steps:
+    - name: Check formatting
+      id: check
+      continue-on-error: true
+      shell: bash
+      run: |
+        mvn -B spotless:check 2>&1 | tee spotless.log
+        exit "${PIPESTATUS[0]}"
+
+    - name: Publish Spotless annotations
+      if: steps.check.outcome == 'failure'
+      shell: bash
+      run: |
+        echo "::error::Spotless found formatting issues. Run 'mvn spotless:apply' locally."
+
+        awk '/The following files had format violations:/{flag=1; next} /^$/{flag=0} flag' spotless.log \
+          | sed 's/^[[:space:]]*//' \
+          | while IFS= read -r file; do
+              [ -n "$file" ] && echo "::error file=$file,line=1,col=1::Spotless formatting violation. Run 'mvn spotless:apply'."
+            done
+
+    - name: Upload Spotless report
+      if: steps.check.outcome == 'failure'
+      uses: actions/upload-artifact@v7
+      with:
+        name: spotless-report
+        path: spotless.log
+
+    - name: Comment on PR
+      if: steps.check.outcome == 'failure' && github.event_name == 'pull_request'
+      uses: actions/github-script@v9
+      with:
+        github-token: ${{ inputs.github-token }}
+        script: |
+          const fs = require('fs');
+          const log = fs.readFileSync('spotless.log', 'utf8');
+
+          const lines = log.split('\n');
+          let inBlock = false;
+          const files = [];
+
+          for (const line of lines) {
+            if (line.includes('The following files had format violations:')) {
+              inBlock = true;
+              continue;
+            }
+            if (inBlock) {
+              if (line.trim() === '') {
+                inBlock = false;
+                continue;
+              }
+              files.push(line.trim());
+            }
+          }
+
+          const marker = '<!-- spotless-check -->';
+
+          const body = [
+            marker,
+            '### ❌ Spotless found formatting issues',
+            '',
+            'Run `mvn spotless:apply` locally, commit, and push to resolve.',
+            '',
+            files.length
+              ? files.map(f => `- \`${f}\``).join('\n')
+              : '_(see the spotless-report artifact for details)_',
+          ].join('\n');
+
+          const { data: comments } = await github.rest.issues.listComments({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            issue_number: context.issue.number,
+          });
+
+          const existing = comments.find(c => c.body.includes(marker));
+
+          if (existing) {
+            await github.rest.issues.updateComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              comment_id: existing.id,
+              body,
+            });
+          } else {
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body,
+            });
+          }
+
+    - name: Clear PR comment on success
+      if: steps.check.outcome == 'success' && github.event_name == 'pull_request'
+      uses: actions/github-script@v9
+      with:
+        github-token: ${{ inputs.github-token }}
+        script: |
+          const marker = '<!-- spotless-check -->';
+
+          const { data: comments } = await github.rest.issues.listComments({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            issue_number: context.issue.number,
+          });
+
+          const existing = comments.find(c => c.body.includes(marker));
+
+          if (existing) {
+            await github.rest.issues.updateComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              comment_id: existing.id,
+              body: `${marker}\n### ✅ Spotless formatting issues resolved`,
+            });
+          }
+
+    - name: Fail if Spotless failed
+      if: steps.check.outcome == 'failure'
+      shell: bash
+      run: exit 1
