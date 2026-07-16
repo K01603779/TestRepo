@@ -73,6 +73,7 @@ jobs:
           path: |
             target/spotbugsXml.xml
             target/spotbugsSarif.json
+          retention-days: 7
 
       - name: Fail if SpotBugs failed
         if: steps.spotbugs.outcome == 'failure'

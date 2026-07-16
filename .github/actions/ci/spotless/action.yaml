@@ -37,6 +37,7 @@ runs:
       with:
         name: spotless-report
         path: spotless.log
+        retention-days: 7
 
     - name: Comment on PR
       if: steps.check.outcome == 'failure' && github.event_name == 'pull_request'
