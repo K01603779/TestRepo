@@ -26,6 +26,6 @@ public class CalculatorTest {
 
   @Test
   void modulusNumbers() {
-    assertEquals(0, Calculator.mod(10, 5));
+    assertEquals(10, Calculator.mod(10, 5));
   }
 }
