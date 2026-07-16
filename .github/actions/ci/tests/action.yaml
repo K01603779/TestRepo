@@ -86,6 +86,7 @@ runs:
         if-no-files-found: ignore
         path: |
           **/target/surefire-reports/*.xml
+        retention-days: 7
 
     - name: Comment on PR for test failures
       if: steps.test.outcome == 'failure' && github.event_name == 'pull_request'
