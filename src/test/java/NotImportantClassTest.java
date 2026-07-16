@@ -21,6 +21,7 @@ public class NotImportantClassTest {
   public void testFailingDoSomething() {
     // Assertions.assertEquals("", doSomething.doSomething());
     // Assertions.assertEquals("", doSomething.doSomething());
+    // Assertions.assertEquals("", doSomething.doSomething());
   }
 
   @Test
