@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.1.0](https://github.com/K01603779/TestRepo/compare/v1.0.0...v1.1.0) (2026-07-17)
+
+
+### Features
+
+* added features ([#28](https://github.com/K01603779/TestRepo/issues/28)) ([7d487db](https://github.com/K01603779/TestRepo/commit/7d487db627205e4ad32109ff1778c59010adfd36))
+* added new test ([#33](https://github.com/K01603779/TestRepo/issues/33)) ([6950a38](https://github.com/K01603779/TestRepo/commit/6950a38f8b0952ce9331794619c0fdbe1f69c25d))
+
+
+### Bug Fixes
+
+* Update README.md ([#34](https://github.com/K01603779/TestRepo/issues/34)) ([787100e](https://github.com/K01603779/TestRepo/commit/787100eecb9f7ff92ee8c3dca0faac312906d369))
+
 ## 1.0.0 (2026-07-17)
 
 
