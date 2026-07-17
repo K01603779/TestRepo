@@ -1,3 +1,3 @@
 # TestRepo
 
-This is a repo that test different GitHub action settings
+This is a repo that test different GitHub action settings.
