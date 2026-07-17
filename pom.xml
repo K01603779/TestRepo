@@ -5,9 +5,9 @@
 
     <modelVersion>4.0.0</modelVersion>
 
-    <groupId>at.jku.isse.designspace</groupId>
+    <groupId>at.mh.testrepo</groupId>
     <artifactId>TestRepo</artifactId>
-    <version>1.0-SNAPSHOT</version>
+    <version>1.0.0</version>
 
     <properties>
         <maven.compiler.release>21</maven.compiler.release>
