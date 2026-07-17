@@ -30,7 +30,7 @@ public class CalculatorTest {
   }
 
   @Test
-  void testMultiple(){
-      assertEquals(0,Calculator.mod(Calculator.add(1,2),Calculator.sub(2,1)));
+  void testMultiple() {
+    assertEquals(0, Calculator.mod(Calculator.add(1, 2), Calculator.sub(2, 1)));
   }
 }
