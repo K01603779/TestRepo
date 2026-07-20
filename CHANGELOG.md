@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.3.0](https://github.com/K01603779/TestRepo/compare/v1.2.1...v1.3.0) (2026-07-20)
+
+
+### Features
+
+* release please publishes a jar ([#44](https://github.com/K01603779/TestRepo/issues/44)) ([910816f](https://github.com/K01603779/TestRepo/commit/910816f6e8f31f6153ccdfe714664e95bf312951))
+
 ## [1.2.1](https://github.com/K01603779/TestRepo/compare/v1.2.0...v1.2.1) (2026-07-20)
 
 
