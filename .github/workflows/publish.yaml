@@ -12,20 +12,24 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout release tag
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.release.tag_name }}
 
-      - uses: actions/setup-java@v4
+      - name: Setup Java
+        uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: 21
+          cache: maven
 
       - name: Build JAR
         run: mvn clean package
 
-      - name: Upload JAR to release
+      - name: Upload JAR to GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: target/*.jar
-
-      - name: Publish Maven artifact
-        run: mvn deploy
+          tag_name: ${{ github.event.release.tag_name }}
+          files: |
+            target/*.jar
