@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.2.0](https://github.com/K01603779/TestRepo/compare/v1.1.0...v1.2.0) (2026-07-20)
+
+
+### Features
+
+* publishing a version now also includes a jar ([#39](https://github.com/K01603779/TestRepo/issues/39)) ([c32a2a6](https://github.com/K01603779/TestRepo/commit/c32a2a6d6250efa82e2456d0b56dc27d0d704178))
+* Update issue templates ([#37](https://github.com/K01603779/TestRepo/issues/37)) ([ec31d5f](https://github.com/K01603779/TestRepo/commit/ec31d5f49bb75ee3f15d92292b084f48858a418f))
+
 ## [1.1.0](https://github.com/K01603779/TestRepo/compare/v1.0.0...v1.1.0) (2026-07-17)
 
 
