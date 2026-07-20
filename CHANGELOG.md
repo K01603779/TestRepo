@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.2.1](https://github.com/K01603779/TestRepo/compare/v1.2.0...v1.2.1) (2026-07-20)
+
+
+### Bug Fixes
+
+* publish should now also upload jar to version tags ([#41](https://github.com/K01603779/TestRepo/issues/41)) ([15e1fee](https://github.com/K01603779/TestRepo/commit/15e1feeb61a70c2d9779c73009788e48034de82e))
+
 ## [1.2.0](https://github.com/K01603779/TestRepo/compare/v1.1.0...v1.2.0) (2026-07-20)
 
 
