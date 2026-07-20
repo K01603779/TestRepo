@@ -5,7 +5,7 @@
 
     <groupId>at.mh.testrepo</groupId>
     <artifactId>TestRepo</artifactId>
-    <version>1.2.1</version>
+    <version>1.2.2-SNAPSHOT</version>
 
     <properties>
         <maven.compiler.release>21</maven.compiler.release>
