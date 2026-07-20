@@ -5,7 +5,7 @@ on:
     types: [published]
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   publish:
@@ -19,5 +19,13 @@ jobs:
           distribution: temurin
           java-version: 21
 
-      - name: Publish
-        run: mvn clean deploy
+      - name: Build JAR
+        run: mvn clean package
+
+      - name: Upload JAR to release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: target/*.jar
+
+      - name: Publish Maven artifact
+        run: mvn deploy
