@@ -31,7 +31,7 @@ public class CalculatorTest {
 
   @Test
   void modulusNumbers2() {
-    assertEquals(4, Calculator.mod(10, 5));
+    assertEquals(0, Calculator.mod(10, 5));
   }
 
   @Test
