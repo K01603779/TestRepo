@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.4.0](https://github.com/K01603779/TestRepo/compare/v1.3.0...v1.4.0) (2026-07-22)
+
+
+### Features
+
+* test ([#50](https://github.com/K01603779/TestRepo/issues/50)) ([46a638d](https://github.com/K01603779/TestRepo/commit/46a638d0af22a0fd89960d656111f7c6fb706b95))
+
+
+### Bug Fixes
+
+* Adapt ReadMe ([#48](https://github.com/K01603779/TestRepo/issues/48)) ([1d5b8c5](https://github.com/K01603779/TestRepo/commit/1d5b8c57b4a0e43210a2f40d49c94c174dec63ef))
+
 ## [1.3.0](https://github.com/K01603779/TestRepo/compare/v1.2.1...v1.3.0) (2026-07-20)
 
 
