@@ -30,6 +30,11 @@ public class CalculatorTest {
   }
 
   @Test
+  void modulusNumbers2() {
+    assertEquals(0, Calculator.mod(10, 5));
+  }
+
+  @Test
   void testMultiple() {
     assertEquals(0, Calculator.mod(Calculator.add(1, 2), Calculator.sub(2, 1)));
   }
